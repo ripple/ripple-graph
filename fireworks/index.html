@@ -1,345 +1,396 @@
+<!DOCTYPE html>
 <html>
-<head>
-<title>Ripple Fireworks Show</title>
-<script type="text/javascript" src="vivagraph.js"></script>
-<script type="text/javascript" src="jquery.js"></script>
-<script type="text/javascript" src="trustlinesdatabase.js"></script>
+  <head>
+    <meta charset='utf-8'/>
+    <title>Ripple Fireworks Show</title>
+    <script type="text/javascript" src="vivagraph.js"></script>
+    <script type="text/javascript" src="jquery.js"></script>
+    <style>
+      body {
+        background: #000;
+        color:#fff;
+        overflow: hidden;
+      }
+      #expandButton {
+        position: absolute;
+        display: none;
+        width: 65px;
+        height: 67px;
+        cursor: pointer;
+        transition: .1s all ease-out;
+        -webkit-transition: .1s all ease-out;
+        -moz-transition: .1s all ease-out;
+      }
+      #expandButton.throb {
+        transform: scale(1.2);
+        -webkit-transform: scale(1.2);
+        -moz-transform: scale(1.2);
+      }
+      #unsupportedMessage {
+        display: none;
+        background: #C73E3A;
+        font-family:helvetica, arial, sans-serif;
+        font-size:20px;
+        margin:0 auto;
+        line-height:100px;
+        text-align:center;
+      }
+      #graphContainer {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+      }
+      #protector {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <script>
+  </script>
+  <body onload="checkBrowserAndLoad();">
+    <h1 id="unsupportedMessage">Your browser is missing support for WebGL.</h1>
+    <div id='graphContainer'></div>
+    <div id='protector'></div>
+    <img src="logo.png" id="expandButton" onclick="beginExpansion()"/>
+    <script type="text/javascript" src="trustlinesdatabase.js"></script>
+    <script>
+    var ONLINE = false;
+    var STARTING_ADDRESS = "r3kmLJN5D28dHuH8vZNUZpMC43pEHpaocV";
+    var WIDTH_OFFSET = 25;  //Centering logo
+    var HEIGHT_OFFSET = 22; //Centering logo
+    var BITSTAMP = "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B";
+    var FORCE_PARAMETERS = {
+      springLength :  30,
+      springCoeff :   0.00002,
+      dragCoeff :     0.02,
+      gravity :       -1.2,
+      theta :         0.8
+    }
 
-<script>
-var ONLINE = false;
-var STARTING_ADDRESS = "r3kmLJN5D28dHuH8vZNUZpMC43pEHpaocV";
-var WIDTH_OFFSET = 25;  //Centering logo
-var HEIGHT_OFFSET = 22; //Centering logo
-var BITSTAMP = "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B";
-var FORCE_PARAMETERS = {
-	springLength : 30,
-	springCoeff : 0.00002,
-	dragCoeff : 0.02,
-	gravity : -1.2,
-	theta : 0.8
-}
+    // WEBSOCKET OPTIONS
+    var Options = {
+      server: {
+        "websocket_ip" : "s1.ripple.com",
+        "websocket_port" : 443,
+        "websocket_ssl" : true
+      }
+    };
 
-// WEBSOCKET OPTIONS
-var Options = {
-	server: {
-		"websocket_ip" : "s1.ripple.com",
-		"websocket_port" : 443,
-		"websocket_ssl" : true
-	}
-};
-var server = {};
-function startWebsocket() {
-	server.socket = null; 	
-	var str;
-	if (Options.server.websocket_ssl) {
-		str= "wss://" + Options.server.websocket_ip + ":";
-	} else {
-		str= "ws://" + Options.server.websocket_ip + ":";
-	}
-	str += Options.server.websocket_port;
-	str += "/";
-	server.socket = new WebSocket(str);
-	server.socket.onopen = function() {
-		console.log("opened websocket");
-	};
-	server.socket.onmessage = function(msg) {
-		//Process a message received from Ripple.
-		var obj = JSON.parse(msg.data);
-		if (obj && obj.result && obj.result.lines) {
-			addConnections(obj.result.account, obj.result.lines);
-		} else {
-			console.log("Could not interpret message.");
-			console.log(obj);
-		}
-	};
-	server.socket.onclose = function() {
-		console.log("disconnected from websocket; connect after 5 seconds");
-		setTimeout(function(){startWebsocket();}, 5000);
-	} 
-}
+    var server = {};
 
-if (ONLINE) {
-	startWebsocket();
-}
+    function startWebsocket(callback) {
+      server.socket = null;
 
+      var url = (Options.server.websocket_ssl ? 'wss://' : 'ws://')
+      + Options.server.websocket_ip + ':'
+      + Options.server.websocket_port;
 
-function checkBrowserAndLoad() {
-	if (navigator.userAgent.indexOf('Firefox') != -1 && parseFloat(navigator.userAgent.substring(navigator.userAgent.indexOf('Firefox') + 8)) >= 3.6) {
-		//Allow Firefox
-		loadGraph();
-	} else if (navigator.userAgent.indexOf('Chrome') != -1 && parseFloat(navigator.userAgent.substring(navigator.userAgent.indexOf('Chrome') + 7).split(' ')[0]) >= 15){
-		//Allow Chrome
-		loadGraph();
-	} else {
-		//Block
-		$("#unsupportedMessage").css("display","block");
-		$("#expandButton").css("display","none");
-	}
-}
+      server.socket = new WebSocket(url);
 
+      server.socket.onopen = function() {
+        console.log("opened websocket");
+      };
 
-function requestTrustLinesOnDelay(address) {
-	var randomFactor;
-	if (address === BITSTAMP) {
-		randomFactor = 1;
-	} else {
-		randomFactor = Math.random();
-	}
-	setTimeout(function(){requestTrustLines(address)},randomFactor*15000+500);
-}
+      server.socket.onmessage = function(msg) {
+        //Process a message received from Ripple.
+        var obj = JSON.parse(msg.data);
+        if (obj && obj.result && obj.result.lines) {
+          addConnections(obj.result.account, obj.result.lines);
+        } else {
+          console.log("Could not interpret message.");
+          console.log(obj);
+        }
+      };
 
-function requestTrustLines(address) {
-	if (ONLINE) {
-		command='{"command":"account_lines","ledger_index":"-1","account":"'+address+'"}';
-		server.socket.send(command);
-	} else {
-		addConnections(address, TRUST_LINES_DATABASE[address]);
-	}
-}
+      server.socket.onclose = function() {
+        console.log("disconnected from websocket; connect after 5 seconds");
+        setTimeout(startWebsocket, 1000 * 5);
+      };
+    }
 
-function addConnections(source, trustLines) {
-	TRUST_LINES_DATABASE[source] = trustLines;
-	for (var i=0; i<trustLines.length; i++) {
-		var tr = trustLines[i];
-		if (!graph.getNode(tr.account)) {
-			requestTrustLinesOnDelay(tr.account);
-		}
-		if (tr.limit_peer != 0) {
-			graph.addLink(source, tr.account);
-		} else /*if (tr.limit != 0)*/ {
-			//This is commented out in order to avoid rogue nodes,
-			//but it's not strictly speaking accurate.
-			graph.addLink(tr.account, source);
-		}
-	}
-}
+    if (ONLINE) {
+      startWebsocket();
+    }
 
-function beginExpansion() {
-	$("#expandButton").css("display","none");
-	graph.addNode(STARTING_ADDRESS);
-	requestTrustLines(STARTING_ADDRESS);
-}
+    function checkBrowserAndLoad() {
+      var hasWebSocket = !ONLINE || ('WebSocket' in window && window.WebSocket.CLOSING === 2);
+      var hasWebGL = ('WebGLRenderingContext' in window);
+      if (hasWebSocket && hasWebGL) {
+        loadGraph();
+      } else {
+        $("#unsupportedMessage").show();
+        $("#expandButton").hide();
+      }
+    }
 
-var linkColors = [
-	0xff000080,0xff540080,
-	0xffaa0080,0xffff0080,
-	0xaaff0080,0x54ff0080,
-	0x00ff0080,0x00ff5580,
-	0x00ffa980,0x00ffff80,
-	0x00a9ff80,0x0054ff80,
-	0x0000ff80,0x5400ff80,
-	0xaa00ff80,0xff00ff80,
-	0xff00aa80,0xff005580,
-	0xffffff80,0x80808080
-];
-//Complementary to link colors, but no alpha channel.
-var nodeColors = [
-	0x00ffff,0x00a9ff,
-	0x0054ff,0x0000ff,
-	0x5400ff,0xaa00ff,
-	0xff00ff,0xff00aa,
-	0xff0055,0xff0000,
-	0xff5400,0xffaa00,
-	0xffff00,0xaaff00,
-	0x54ff00,0x00ff00,
-	0x00ff55,0x00ffa9,
-	0x808080,0xffffff
-];
+    function requestTrustLinesOnDelay(address) {
+      var randomFactor;
+      if (address === BITSTAMP) {
+        randomFactor = 1;
+      } else {
+        randomFactor = Math.random();
+      }
+      setTimeout(function(){
+        requestTrustLines(address)
+      }, randomFactor * 15000 + 500);
+    }
 
-var graph;
-function loadGraph() {
-	var graphGenerator = Viva.Graph.generator();
-	graph = Viva.Graph.graph();
-	var layout = Viva.Graph.Layout.forceDirected(graph, FORCE_PARAMETERS);
-	var graphics = Viva.Graph.View.webglGraphics();
+    function requestTrustLines(address) {
+      if (ONLINE) {
+        command='{"command":"account_lines","ledger_index":"-1","account":"'+address+'"}';
+        server.socket.send(command);
+      } else {
+        addConnections(address, TRUST_LINES_DATABASE[address]);
+      }
+    }
 
-	var circleNode = buildCircleNodeShader();
-	graphics.setNodeProgram(circleNode);
-	graphics
-	   .node(function(node){
-			var colorID = (node.id.charCodeAt(14) + node.id.charCodeAt(16)) % nodeColors.length;
-			return new WebglCircle(10 + Math.random() * 10, nodeColors[colorID]);
-	   })
-	   .link(function(link) {
-			var colorID = (link.fromId.charCodeAt(14) + link.fromId.charCodeAt(16)) % linkColors.length;
-			return Viva.Graph.View.webglLine( linkColors[colorID] );
-	   });
+    function addConnections(source, trustLines) {
+      TRUST_LINES_DATABASE[source] = trustLines;
+      for (var i=0; i<trustLines.length; i++) {
+        var tr = trustLines[i];
+        if (!graph.getNode(tr.account)) {
+          requestTrustLinesOnDelay(tr.account);
+        }
+        if (tr.limit_peer != 0) {
+          graph.addLink(source, tr.account);
+        } else /*if (tr.limit != 0)*/ {
+          //This is commented out in order to avoid rogue nodes,
+          //but it's not strictly speaking accurate.
+          graph.addLink(tr.account, source);
+        }
+      }
+    }
 
-	var renderer = Viva.Graph.View.renderer(graph, {
-			layout    : layout,
-			graphics  : graphics,
-			container : document.getElementById('graphContainer')
-		});
-	renderer.run();
-	
-	function relocateTheButton() {
-		$("#expandButton")
-			.css("left",parseInt($("canvas").attr("width"))/2-WIDTH_OFFSET)
-			.css("top",parseInt($("canvas").attr("height"))/2-HEIGHT_OFFSET);
-	}
-	window.onresize = relocateTheButton;
-	relocateTheButton();
-}
+    function beginExpansion() {
+      $("#expandButton").hide();
+      $("#protector").hide();
+      graph.addNode(STARTING_ADDRESS);
+      requestTrustLines(STARTING_ADDRESS);
+    }
+
+    var linkColors = [
+      0xff000080,0xff540080,
+      0xffaa0080,0xffff0080,
+      0xaaff0080,0x54ff0080,
+      0x00ff0080,0x00ff5580,
+      0x00ffa980,0x00ffff80,
+      0x00a9ff80,0x0054ff80,
+      0x0000ff80,0x5400ff80,
+      0xaa00ff80,0xff00ff80,
+      0xff00aa80,0xff005580,
+      0xffffff80,0x80808080
+    ];
+    //Complementary to link colors, but no alpha channel.
+    var nodeColors = [
+      0x00ffff,0x00a9ff,
+      0x0054ff,0x0000ff,
+      0x5400ff,0xaa00ff,
+      0xff00ff,0xff00aa,
+      0xff0055,0xff0000,
+      0xff5400,0xffaa00,
+      0xffff00,0xaaff00,
+      0x54ff00,0x00ff00,
+      0x00ff55,0x00ffa9,
+      0x808080,0xffffff
+    ];
+
+    var graph;
+    function loadGraph() {
+      var graphGenerator = Viva.Graph.generator();
+      graph = Viva.Graph.graph();
+      var layout = Viva.Graph.Layout.forceDirected(graph, FORCE_PARAMETERS);
+      var graphics = Viva.Graph.View.webglGraphics();
+
+      var circleNode = buildCircleNodeShader();
+      graphics.setNodeProgram(circleNode);
+      graphics
+      .node(function(node){
+        var colorID = (node.id.charCodeAt(14) + node.id.charCodeAt(16)) % nodeColors.length;
+        return new WebglCircle(10 + Math.random() * 10, nodeColors[colorID]);
+      })
+      .link(function(link) {
+        var colorID = (link.fromId.charCodeAt(14) + link.fromId.charCodeAt(16)) % linkColors.length;
+        return Viva.Graph.View.webglLine( linkColors[colorID] );
+      });
+
+      var renderer = Viva.Graph.View.renderer(graph, {
+        layout    : layout,
+        graphics  : graphics,
+        container : document.getElementById('graphContainer')
+      });
+      renderer.run();
+
+      function relocateTheButton() {
+        $("#expandButton").css({
+          display: 'block',
+          left:  Math.floor($('canvas').width() / 2) - WIDTH_OFFSET,
+          top:   Math.floor($('canvas').height() / 2) - HEIGHT_OFFSET
+        });
+      }
+
+      window.onresize = relocateTheButton;
+      relocateTheButton();
+    }
 
 
-// WebGL stuff
-function WebglCircle(size, color) {
-	this.size = size;
-	this.color = color;
-}
-// Here be dragons
-function buildCircleNodeShader() {
-	// For each primitive we need 4 attributes: x, y, color and size.
-	var ATTRIBUTES_PER_PRIMITIVE = 4,
-		nodesFS = [
-		'precision mediump float;',
-		'varying vec4 color;',
+    // WebGL stuff
+    function WebglCircle(size, color) {
+      this.size = size;
+      this.color = color;
+    }
+    // Here be dragons
+    function buildCircleNodeShader() {
+      // For each primitive we need 4 attributes: x, y, color and size.
+      var ATTRIBUTES_PER_PRIMITIVE = 4,
+      nodesFS = [
+        'precision mediump float;',
+        'varying vec4 color;',
 
-		'void main(void) {',
-		'   if ((gl_PointCoord.x - 0.5) * (gl_PointCoord.x - 0.5) + (gl_PointCoord.y - 0.5) * (gl_PointCoord.y - 0.5) < 0.25) {',
-		'     gl_FragColor = color;',
-		'   } else {',
-		'     gl_FragColor = vec4(0);',
-		'   }',
-		'}'].join('\n'),
-		nodesVS = [
-		'attribute vec2 a_vertexPos;',
-		// Pack color and size into vector. First element is color, second is size.
-		// Since it's floating point we can only use 24 bit to pack colors...
-		// thus alpha channel is dropped, and is always assumed to be 1.
-		'attribute vec2 a_customAttributes;',
-		'uniform vec2 u_screenSize;',
-		'uniform mat4 u_transform;',
-		'varying vec4 color;',
+        'void main(void) {',
+        '   if ((gl_PointCoord.x - 0.5) * (gl_PointCoord.x - 0.5) + (gl_PointCoord.y - 0.5) * (gl_PointCoord.y - 0.5) < 0.25) {',
+        '     gl_FragColor = color;',
+        '   } else {',
+        '     gl_FragColor = vec4(0);',
+        '   }',
+        '}'].join('\n'),
+        nodesVS = [
+          'attribute vec2 a_vertexPos;',
+          // Pack color and size into vector. First element is color, second is size.
+          // Since it's floating point we can only use 24 bit to pack colors...
+          // thus alpha channel is dropped, and is always assumed to be 1.
+          'attribute vec2 a_customAttributes;',
+          'uniform vec2 u_screenSize;',
+          'uniform mat4 u_transform;',
+          'varying vec4 color;',
 
-		'void main(void) {',
-		'   gl_Position = u_transform * vec4(a_vertexPos/u_screenSize, 0, 1);',
-		'   gl_PointSize = a_customAttributes[1] * u_transform[0][0];',
-		'   float c = a_customAttributes[0];',
-		'   color.b = mod(c, 256.0); c = floor(c/256.0);',
-		'   color.g = mod(c, 256.0); c = floor(c/256.0);',
-		'   color.r = mod(c, 256.0); c = floor(c/256.0); color /= 255.0;',
-		'   color.a = 1.0;',
-		'}'].join('\n');
+          'void main(void) {',
+          '   gl_Position = u_transform * vec4(a_vertexPos/u_screenSize, 0, 1);',
+          '   gl_PointSize = a_customAttributes[1] * u_transform[0][0];',
+          '   float c = a_customAttributes[0];',
+          '   color.b = mod(c, 256.0); c = floor(c/256.0);',
+          '   color.g = mod(c, 256.0); c = floor(c/256.0);',
+          '   color.r = mod(c, 256.0); c = floor(c/256.0); color /= 255.0;',
+          '   color.a = 1.0;',
+          '}'].join('\n');
 
-	var program,
-		gl,
-		buffer,
-		locations,
-		utils,
-		nodes = new Float32Array(64),
-		nodesCount = 0,
-		canvasWidth, canvasHeight, transform,
-		isCanvasDirty;
-	
-	return {
-		/**
-		 * Called by webgl renderer to load the shader into gl context.
-		 */
-		load : function (glContext) {
-			gl = glContext;
-			
-			webglUtils = Viva.Graph.webgl(glContext);
+          var program
+            , gl
+            , buffer
+            , locations
+            , utils
+            , nodes = new Float32Array(64)
+            , nodesCount = 0
+            , canvasWidth, canvasHeight, transform
+            , isCanvasDirty;
 
-			program = webglUtils.createProgram(nodesVS, nodesFS);
-			gl.useProgram(program);
-			locations = webglUtils.getLocations(program, ['a_vertexPos', 'a_customAttributes', 'u_screenSize', 'u_transform']);
+          return {
+            /**
+             * Called by webgl renderer to load the shader into gl context.
+             */
+            load : function (glContext) {
+              gl = glContext;
 
-			gl.enableVertexAttribArray(locations.vertexPos);
-			gl.enableVertexAttribArray(locations.customAttributes);
-			
-			buffer = gl.createBuffer();
-		},
+              webglUtils = Viva.Graph.webgl(glContext);
 
-		/**
-		 * Called by webgl renderer to update node position in the buffer array
-		 *
-		 * @param nodeUI - data model for the rendered node (WebGLCircle in this case)
-		 * @param pos - {x, y} coordinates of the node.
-		 */
-		position : function (nodeUI, pos) {
-			var idx = nodeUI.id;
-			nodes[idx * ATTRIBUTES_PER_PRIMITIVE] = pos.x;
-			nodes[idx * ATTRIBUTES_PER_PRIMITIVE + 1] = pos.y;
-			nodes[idx * ATTRIBUTES_PER_PRIMITIVE + 2] = nodeUI.color;
-			nodes[idx * ATTRIBUTES_PER_PRIMITIVE + 3] = nodeUI.size;
-		},
+              program = webglUtils.createProgram(nodesVS, nodesFS);
+              gl.useProgram(program);
+              locations = webglUtils.getLocations(program, ['a_vertexPos', 'a_customAttributes', 'u_screenSize', 'u_transform']);
 
-		/**
-		 * Request from webgl renderer to actually draw our stuff into the
-		 * gl context. This is the core of our shader.
-		 */
-		render : function() {
-			gl.useProgram(program);
-			gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-			gl.bufferData(gl.ARRAY_BUFFER, nodes, gl.DYNAMIC_DRAW);
-			
-			if (isCanvasDirty) {
-				isCanvasDirty = false;
-				gl.uniformMatrix4fv(locations.transform, false, transform);
-				gl.uniform2f(locations.screenSize, canvasWidth, canvasHeight);
-			}
+              gl.enableVertexAttribArray(locations.vertexPos);
+              gl.enableVertexAttribArray(locations.customAttributes);
 
-			gl.vertexAttribPointer(locations.vertexPos, 2, gl.FLOAT, false, ATTRIBUTES_PER_PRIMITIVE * Float32Array.BYTES_PER_ELEMENT, 0);
-			gl.vertexAttribPointer(locations.customAttributes, 2, gl.FLOAT, false, ATTRIBUTES_PER_PRIMITIVE * Float32Array.BYTES_PER_ELEMENT, 2 * 4);
+              buffer = gl.createBuffer();
+            },
 
-			gl.drawArrays(gl.POINTS, 0, nodesCount);
-		},
+            /**
+             * Called by webgl renderer to update node position in the buffer array
+             *
+             * @param nodeUI - data model for the rendered node (WebGLCircle in this case)
+             * @param pos - {x, y} coordinates of the node.
+             */
+            position : function (nodeUI, pos) {
+              var idx = nodeUI.id;
+              nodes[idx * ATTRIBUTES_PER_PRIMITIVE] = pos.x;
+              nodes[idx * ATTRIBUTES_PER_PRIMITIVE + 1] = pos.y;
+              nodes[idx * ATTRIBUTES_PER_PRIMITIVE + 2] = nodeUI.color;
+              nodes[idx * ATTRIBUTES_PER_PRIMITIVE + 3] = nodeUI.size;
+            },
 
-		/**
-		 * Called by webgl renderer when user scales/pans the canvas with nodes.
-		 */
-		updateTransform : function (newTransform) {
-			transform = newTransform;
-			isCanvasDirty = true;
-		},
+            /**
+             * Request from webgl renderer to actually draw our stuff into the
+             * gl context. This is the core of our shader.
+             */
+            render : function() {
+              gl.useProgram(program);
+              gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+              gl.bufferData(gl.ARRAY_BUFFER, nodes, gl.DYNAMIC_DRAW);
 
-		/**
-		 * Called by webgl renderer when user resizes the canvas with nodes.
-		 */
-		updateSize : function (newCanvasWidth, newCanvasHeight) {
-			canvasWidth = newCanvasWidth;
-			canvasHeight = newCanvasHeight;
-			isCanvasDirty = true;
-		},
+              if (isCanvasDirty) {
+                isCanvasDirty = false;
+                gl.uniformMatrix4fv(locations.transform, false, transform);
+                gl.uniform2f(locations.screenSize, canvasWidth, canvasHeight);
+              }
 
-		/**
-		 * Called by webgl renderer to notify us that the new node was created in the graph
-		 */
-		createNode : function (node) {
-			nodes = webglUtils.extendArray(nodes, nodesCount, ATTRIBUTES_PER_PRIMITIVE);
-			nodesCount += 1;
-		},
+              gl.vertexAttribPointer(locations.vertexPos, 2, gl.FLOAT, false, ATTRIBUTES_PER_PRIMITIVE * Float32Array.BYTES_PER_ELEMENT, 0);
+              gl.vertexAttribPointer(locations.customAttributes, 2, gl.FLOAT, false, ATTRIBUTES_PER_PRIMITIVE * Float32Array.BYTES_PER_ELEMENT, 2 * 4);
 
-		/**
-		 * Called by webgl renderer to notify us that the node was removed from the graph
-		 */
-		removeNode : function (node) {
-			if (nodesCount > 0) { nodesCount -=1; }
+              gl.drawArrays(gl.POINTS, 0, nodesCount);
+            },
 
-			if (node.id < nodesCount && nodesCount > 0) {
-				// we do not really delete anything from the buffer.
-				// Instead we swap deleted node with the "last" node in the
-				// buffer and decrease marker of the "last" node. Gives nice O(1)
-				// performance, but make code slightly harder than it could be:
-				webglUtils.copyArrayPart(nodes, node.id*ATTRIBUTES_PER_PRIMITIVE, nodesCount*ATTRIBUTES_PER_PRIMITIVE, ATTRIBUTES_PER_PRIMITIVE);
-			}
-		},
+            /**
+             * Called by webgl renderer when user scales/pans the canvas with nodes.
+             */
+            updateTransform : function (newTransform) {
+              transform = newTransform;
+              isCanvasDirty = true;
+            },
 
-		/**
-		 * This method is called by webgl renderer when it changes parts of its
-		 * buffers. We don't use it here, but it's needed by API (see the comment
-		 * in the removeNode() method)
-		 */
-		replaceProperties : function(replacedNode, newNode) {},
-	};
-}
-</script>
-</head>
+            /**
+             * Called by webgl renderer when user resizes the canvas with nodes.
+             */
+            updateSize : function (newCanvasWidth, newCanvasHeight) {
+              canvasWidth = newCanvasWidth;
+              canvasHeight = newCanvasHeight;
+              isCanvasDirty = true;
+            },
 
-<body onload="checkBrowserAndLoad();" style="background-color:black; color:white;">
-	<h1 id="unsupportedMessage" style="display:none;">Sorry, your browser isn't supported! Try Chrome or Firefox instead.</h1>
-	<div id='graphContainer' style="position: absolute; width: 100%; height: 100%;"></div>
-	<img src="logo.png" id="expandButton" width="65" height="67" style="position:absolute; cursor:pointer" onclick="beginExpansion()"/>
-</body>
-</html>
+            /**
+             * Called by webgl renderer to notify us that the new node was created in the graph
+             */
+            createNode : function (node) {
+              nodes = webglUtils.extendArray(nodes, nodesCount, ATTRIBUTES_PER_PRIMITIVE);
+              nodesCount += 1;
+            },
+
+            /**
+             * Called by webgl renderer to notify us that the node was removed from the graph
+             */
+            removeNode : function (node) {
+              if (nodesCount > 0) { nodesCount -=1; }
+
+              if (node.id < nodesCount && nodesCount > 0) {
+                // we do not really delete anything from the buffer.
+                // Instead we swap deleted node with the "last" node in the
+                // buffer and decrease marker of the "last" node. Gives nice O(1)
+                // performance, but make code slightly harder than it could be:
+                webglUtils.copyArrayPart(nodes, node.id*ATTRIBUTES_PER_PRIMITIVE, nodesCount*ATTRIBUTES_PER_PRIMITIVE, ATTRIBUTES_PER_PRIMITIVE);
+              }
+            },
+
+            /**
+             * This method is called by webgl renderer when it changes parts of its
+             * buffers. We don't use it here, but it's needed by API (see the comment
+             * in the removeNode() method)
+             */
+            replaceProperties : function(replacedNode, newNode) {},
+          };
+    }
+
+    setInterval(function() {
+        $('#expandButton').toggleClass('throb');
+    }, 1000 * 1);
+    </script>
+    </body>
+    </html>
